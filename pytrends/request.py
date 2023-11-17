@@ -45,7 +45,7 @@ class TrendReq(object):
         self.tz = tz
         self.hl = hl
         self.geo = geo
-        self.kw_list = list()
+        self.kw_list = []
         self.timeout = timeout
         self.proxies = proxies  # add a proxy option
         self.retries = retries
@@ -57,8 +57,8 @@ class TrendReq(object):
         self.token_payload = dict()
         self.interest_over_time_widget = dict()
         self.interest_by_region_widget = dict()
-        self.related_topics_widget_list = list()
-        self.related_queries_widget_list = list()
+        self.related_topics_widget_list = []
+        self.related_queries_widget_list = []
 
     def GetGoogleCookie(self):
         """
@@ -137,27 +137,26 @@ class TrendReq(object):
         else:
             response = s.get(url, timeout=self.timeout, cookies=self.cookies,
                              **kwargs, **self.requests_args)  # DO NOT USE retries or backoff_factor here
-        # check if the response contains json and throw an exception otherwise
-        # Google mostly sends 'application/json' in the Content-Type header,
-        # but occasionally it sends 'application/javascript
-        # and sometimes even 'text/javascript
-        if response.status_code == 200 and 'application/json' in \
-                response.headers['Content-Type'] or \
-                'application/javascript' in response.headers['Content-Type'] or \
-                'text/javascript' in response.headers['Content-Type']:
-            # trim initial characters
-            # some responses start with garbage characters, like ")]}',"
-            # these have to be cleaned before being passed to the json parser
-            content = response.text[trim_chars:]
-            # parse json
-            self.GetNewProxy()
-            return json.loads(content)
-        else:
+        if (
+            (
+                response.status_code != 200
+                or 'application/json' not in response.headers['Content-Type']
+            )
+            and 'application/javascript' not in response.headers['Content-Type']
+            and 'text/javascript' not in response.headers['Content-Type']
+        ):
             # error
             raise exceptions.ResponseError(
                 'The request failed: Google returned a '
                 'response with code {0}.'.format(response.status_code),
                 response=response)
+        # trim initial characters
+        # some responses start with garbage characters, like ")]}',"
+        # these have to be cleaned before being passed to the json parser
+        content = response.text[trim_chars:]
+        # parse json
+        self.GetNewProxy()
+        return json.loads(content)
 
     def build_payload(self, kw_list, cat=0, timeframe='today 5-y', geo='',
                       gprop=''):
@@ -430,8 +429,7 @@ class TrendReq(object):
             url=TrendReq.TRENDING_SEARCHES_URL,
             method=TrendReq.GET_METHOD
         )[pn]
-        result_df = pd.DataFrame(req_json)
-        return result_df
+        return pd.DataFrame(req_json)
 
     def today_searches(self, pn='US'):
         """Request data from Google Daily Trends section and returns a dataframe"""
@@ -484,9 +482,7 @@ class TrendReq(object):
 
         final_json = [{ key: ts[key] for key in ts.keys() if key in wanted_keys} for ts in req_json ]
 
-        result_df = pd.DataFrame(final_json)
-
-        return result_df
+        return pd.DataFrame(final_json)
 
     def top_charts(self, date, hl='en-US', tz=300, geo='GLOBAL'):
         """Request data from Google's Top Charts section and return a dataframe"""
@@ -521,26 +517,24 @@ class TrendReq(object):
         kw_param = quote(keyword)
         parameters = {'hl': self.hl}
 
-        req_json = self._get_data(
+        return self._get_data(
             url=TrendReq.SUGGESTIONS_URL + kw_param,
             params=parameters,
             method=TrendReq.GET_METHOD,
-            trim_chars=5
+            trim_chars=5,
         )['default']['topics']
-        return req_json
 
     def categories(self):
         """Request available categories data from Google's API and return a dictionary"""
 
         params = {'hl': self.hl}
 
-        req_json = self._get_data(
+        return self._get_data(
             url=TrendReq.CATEGORIES_URL,
             params=params,
             method=TrendReq.GET_METHOD,
-            trim_chars=5
+            trim_chars=5,
         )
-        return req_json
 
     def get_historical_interest(self, keywords, year_start=2018, month_start=1,
                                 day_start=1, hour_start=0, year_end=2018,
@@ -588,8 +582,6 @@ class TrendReq(object):
                 df = df.append(week_df)
             except Exception as e:
                 print(e)
-                pass
-
             start_date += delta
             date_iterator += delta
 
@@ -610,7 +602,6 @@ class TrendReq(object):
                     df = df.append(week_df)
                 except Exception as e:
                     print(e)
-                    pass
                 break
 
             # just in case you are rate-limited by Google. Recommended is 60 if you are.
